@@ -1,4 +1,4 @@
-REPORT zvc_prog_itab_groupby_reduce.
+ REPORT zvc_prog_itab_groupby_reduce.
 
 START-OF-SELECTION.
 
@@ -48,9 +48,15 @@ START-OF-SELECTION.
                                      FOR  flight_item IN GROUP <ls_carrier_group>
                                      NEXT total = total + flight_item-price ).
 
+    DATA(lv_group_max_price) = REDUCE s_price(
+                                     INIT lv_max = 0
+                                     FOR flight_item IN GROUP <ls_carrier_group>
+                                     NEXT lv_max = COND #( WHEN flight_item-price > lv_max THEN flight_item-price ELSE lv_max ) ).
+
     " Print the Group Header along with our application-calculated total
     WRITE: / '>>> Airline:', <ls_carrier_group>-carrier,
-             '| Memory Total (REDUCE):', lv_group_total_revenue CURRENCY 'USD' COLOR COL_TOTAL.
+             '| Memory Total (REDUCE):', lv_group_total_revenue CURRENCY 'USD' COLOR COL_TOTAL,
+             '| Max Price:', lv_group_max_price CURRENCY 'USD' COLOR COL_POSITIVE.
 
     " 4. Loop through the actual members to prove the raw data was not destroyed
     LOOP AT GROUP <ls_carrier_group> ASSIGNING FIELD-SYMBOL(<ls_line_item>).
@@ -61,8 +67,3 @@ START-OF-SELECTION.
 
     ULINE. " Line break between groups
   ENDLOOP.
-
-*****************************************************************************************************************
-
-Output:- 
-
