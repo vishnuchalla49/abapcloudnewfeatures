@@ -1,0 +1,63 @@
+REPORT zvc_prog_itab_groupby_reduce.
+
+START-OF-SELECTION.
+
+  " The database calculates the math on its own hardware.
+  " =====================================================================
+  WRITE: / '--- DEMO 1: SELECT GROUP BY (Database Level SUM) ---' COLOR COL_HEADING.
+  WRITE: / 'The DB aggregates the math; individual row details are never sent.'.
+  ULINE.
+
+  SELECT carrid,
+         SUM( price ) AS total_revenue
+  FROM sflight
+  GROUP BY carrid
+  INTO TABLE @DATA(lt_db_aggreg).
+
+  " Output the DB aggregated data
+  LOOP AT lt_db_aggreg ASSIGNING FIELD-SYMBOL(<ls_db_aggreg>).
+
+    WRITE: / 'Airline:', <ls_db_aggreg>-carrid,
+              '| DB Total Revenue:', <ls_db_aggreg>-total_revenue CURRENCY 'USD'.
+  ENDLOOP.
+
+  SKIP 3.
+
+  " =====================================================================
+  " DEMO 2: LOOP AT ITAB GROUP BY with App-Level REDUCE
+  " Raw rows are fetched first. REDUCE dynamically sums up the data
+  " in memory while keeping the line items intact.
+  " =====================================================================
+  WRITE: / '--- DEMO 2: LOOP AT ITAB GROUP BY (With REDUCE) ---' COLOR COL_HEADING.
+  WRITE: / 'Raw rows sit in memory. REDUCE sums them up on the application server.'.
+  ULINE.
+
+  " 1. Pull the raw line-item data into an internal table
+  SELECT carrid, connid, fldate, price
+    FROM sflight
+    INTO TABLE @DATA(lt_raw_flights).
+
+  " 2. Group the internal table by the Carrier ID (carrid)
+  LOOP AT lt_raw_flights INTO DATA(ls_flight)
+       GROUP BY ( carrier = ls_flight-carrid )
+       ASSIGNING FIELD-SYMBOL(<ls_carrier_group>).
+
+    " 3. Use REDUCE to dynamically sum up the prices for the current group in memory
+    DATA(lv_group_total_revenue) = REDUCE s_price(
+                                     INIT total = 0
+                                     FOR  flight_item IN GROUP <ls_carrier_group>
+                                     NEXT total = total + flight_item-price ).
+
+    " Print the Group Header along with our application-calculated total
+    WRITE: / '>>> Airline:', <ls_carrier_group>-carrier,
+             '| Memory Total (REDUCE):', lv_group_total_revenue CURRENCY 'USD' COLOR COL_TOTAL.
+
+    " 4. Loop through the actual members to prove the raw data was not destroyed
+    LOOP AT GROUP <ls_carrier_group> ASSIGNING FIELD-SYMBOL(<ls_line_item>).
+      WRITE: / '   -> Flight:', <ls_line_item>-connid,
+               'Date:', <ls_line_item>-fldate,
+               'Price:', <ls_line_item>-price CURRENCY 'USD'.
+    ENDLOOP.
+
+    ULINE. " Line break between groups
+  ENDLOOP.
